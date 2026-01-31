@@ -12,6 +12,7 @@ Limitations:
 1) Scent names come from their website, so you will need to build a local databse. If you know of more please add them here!
 2) Pura says they have some fancy-pants tech that diffuses different scents differently. Shrug. All I do is turn the heat to 3 different levels.
 3) Made up my own calculations for % left based on what they say an average scent should last at medium 8/h use.
+4) This is only for the Mini right now. Someone send me the others to work on!
 
 Could not be done with the work of:
 https://github.com/stm32duino/ST25R3916
