@@ -24,4 +24,4 @@ https://github.com/stm32duino/ST25R3916
 | --------- | ---- | ---- |
 |  E002080AA155AA6F | Lemon | https://pura.com/products/lemon |
 
-![revb pura mini](https://github.com/user-attachments/assets/b8c4ba86-307b-4871-8b53-347a7c2398c8)
+![revb pura mini](revb pura mini.jpg)
