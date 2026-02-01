@@ -1,5 +1,4 @@
 This allows for the use of the Pura Mini diffuser with Home Assistant via ESPhome. All Local control, no more cloud needed.
-Support me here https://ko-fi.com/thefatbastid
 
 1) Peel up the bottom of the silver back sticker and unscrew the two screws.
 2) Use the 4x2 vias to back up the stock firmware and reflash with esphome.
@@ -25,3 +24,5 @@ https://github.com/stm32duino/ST25R3916
 |  E002080AA155AA6F | Lemon | https://pura.com/products/lemon |
 
 <img src="revb pura mini.jpg">
+
+Support me here https://ko-fi.com/thefatbastid
