@@ -189,6 +189,11 @@ void ST25R3918Component::handle_nfc_state_(rfalNfcState state, rfalNfcDevice *nf
 
         // Only process if it's a NEW/different tag
         if (!same_tag) {
+          // Save usage data for previous cart if applicable
+          if (!this->active_cart_id_.empty() && this->active_cart_id_ != this->cart_id_) {
+            this->save_usage_data_();
+          }
+
           // Check for ST manufacturer (Pura carts)
           bool is_pura_cart = (nfc_dev->type == RFAL_NFC_LISTEN_TYPE_NFCV &&
                                nfc_dev->nfcidLen >= 8 &&

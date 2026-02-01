@@ -52,8 +52,16 @@ class ST25R3918Component : public PollingComponent {
   void set_scent_remaining_sensor(sensor::Sensor *sensor) { this->scent_remaining_sensor_ = sensor; }
 #endif
 
-  // Called from YAML to indicate heater state
-  void set_heating(bool heating) { this->heating_ = heating; }
+  // Force an immediate write of usage counters to NVS (call before rebooting).
+  void flush_usage() { this->save_usage_data_(); }
+
+  // Called from YAML to indicate heater state (flush on OFF edge).
+  void set_heating(bool heating) {
+    if (this->heating_ && !heating) {
+      this->save_usage_data_();
+    }
+    this->heating_ = heating;
+  }
 
   // Getters for Home Assistant sensors
   const char *get_cart_id() const { return this->cart_id_; }
