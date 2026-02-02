@@ -8,11 +8,11 @@ This allows for the use of the Pura Mini diffuser with Home Assistant via ESPhom
 
 1) Peel up the bottom of the silver back sticker and unscrew the two screws.
 2) Connect to the 4x2 vias:
-    * Your usb - serial converter's tx to rx
-    * Your usb - serial converter's rx to tx
-    * Your usb - serial converter's 3.3v to the 3.3v via
-    * Your usb - serial converter's ground to GND via.
-    * Your usb - serial converter's ground to I/O 0.
+    * Your usb - serial converter's tx to pura's rx.
+    * Your usb - serial converter's rx to pura's tx.
+    * Your usb - serial converter's 3.3v to pura's 3.3v via
+    * Your usb - serial converter's ground to pura's GND via.
+    * Your usb - serial converter's ground to pura's I/O 0.
     <img src="vias.png">
 3) Download the stock firmware with : "esptool --port COM whatever_com_port_it_is read-flash 0 ALL pura-mini-backup.bin"
 4) Use ESPHome dashboard to perform the initial flashing. Once you can OTA update it, you can disconnect the serial converter.
