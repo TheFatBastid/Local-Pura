@@ -1,3 +1,4 @@
+
 ## Summary
 
 This allows for the use of the Pura Mini diffuser with Home Assistant via ESPhome. All Local control, no more cloud needed.
@@ -41,7 +42,7 @@ https://github.com/stm32duino/ST25R3916
 |  E002080AA155AA6F | Lemon | https://pura.com/products/lemon |
 
 ## Layout
-The esp32-wrover-e connects to a thermistor, ceramic heater, push button, 2 top leds, 1 button led, a push button, and a ST25R3918 NFC reader, which in turn connected to a Molex 14623605151 antenna.
+The esp32-wrover-e connects to a thermistor, ceramic heater, push button, 2 top leds, 1 button led, and a ST25R3918 NFC reader, which in turn connected to a Molex 14623605151 antenna.
 
 esp32: https://documentation.espressif.com/esp32-wrover-e_esp32-wrover-ie_datasheet_en.html
 
