@@ -1,3 +1,4 @@
+<img src="pura logo.png">
 
 ## Summary
 
