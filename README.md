@@ -52,7 +52,7 @@ ST25R3918: https://www.st.com/en/nfc/st25r3918.html A cut down STR253916.
 
 Antenna: https://www.molex.com/en-us/products/part-detail/1462360151
 
-Inital revision boards are white, Rev B boads are green.
+Inital revision boards are white, Rev B boads are green. The only change seems to be changing out the LNK3209G mosfet IC at U2 for the LNK3205D mosfet at U9 (and appropriate caps, etc)
 <img src="revb pura mini.jpg">
 
 | Pin | Function |
