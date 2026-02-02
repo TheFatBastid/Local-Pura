@@ -13,7 +13,7 @@ This allows for the use of the Pura Mini diffuser with Home Assistant via ESPhom
     * Your usb - serial converter's 3.3v to the 3.3v via
     * Your usb - serial converter's ground to GND via.
     * Your usb - serial converter's ground to I/O 0.
-3) Download the stock firmware with : "esptool --port COM<whatever com port are using> read-flash 0 ALL vue-orig-backup.bin"
+3) Download the stock firmware with : "esptool --port COM<whatever com port are using> read-flash 0 ALL pura-mini-backup.bin"
 4) Use ESPHome dashboard to perform the initial flashing.
 5) Note the blanked api encryption key, ota password, and fallback wifi password. Be sure that is all set.
 7) Use samba or something to upload the st25r3918 component directory to HA, in /homeassistant/esphome/components/  .
