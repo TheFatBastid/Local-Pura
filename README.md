@@ -14,7 +14,7 @@ This allows for the use of the Pura Mini diffuser with Home Assistant via ESPhom
     * Your usb - serial converter's ground to GND via.
     * Your usb - serial converter's ground to I/O 0.
 3) Download the stock firmware with : "esptool --port COM<whatever com port are using> read-flash 0 ALL pura-mini-backup.bin"
-4) Use ESPHome dashboard to perform the initial flashing.
+4) Use ESPHome dashboard to perform the initial flashing. Once you can OTA update it, you can disconnect the serial converter.
 5) Note the blanked api encryption key, ota password, and fallback wifi password. Be sure that is all set.
 7) Use samba or something to upload the st25r3918 component directory to HA, in /homeassistant/esphome/components/  .
 9) Install the yaml on the device and enjoy.
@@ -22,7 +22,7 @@ This allows for the use of the Pura Mini diffuser with Home Assistant via ESPhom
 I am a bad programmer, this will burn down your house, don't blame me.
 
 ## Limitations
-1) Scent names come from their website, so you will need to build a local databse. If you know of more please add them here!
+1) Scent names come from their website, so you will need to build a local database. If you know of more please add them here!
 2) Pura says they have some fancy-pants tech that diffuses different scents differently. Shrug. All I do is turn the heat to 3 different levels.
 3) Made up my own calculations for % left based on: "With a Pura Mini, a fragrance vial lasts about 30 days in a small space, diffusing 6–8 hours per day at medium intensity."
 4) This is only for the Mini right now. Someone send me the others to work on!
