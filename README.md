@@ -56,7 +56,7 @@ Inital revision boards are white, Rev B boads are green. The only change seems t
 <img src="revb pura mini.jpg">
 
 | Pin | Mini Function | V4 function|
-| --- | -------- ||
+| --- | -------- | ------ |
 | GPIO0| Held low for programming ||
 | GPIO1| TX for programming ||
 | GPIO3| RX for programming ||
