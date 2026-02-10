@@ -57,9 +57,9 @@ Inital revision boards are white, Rev B boads are green. The only change seems t
 
 | Pin | Mini Function | V4 function|
 | --- | -------- | ------ |
-| GPIO0| Held low for programming ||
-| GPIO1| TX for programming ||
-| GPIO3| RX for programming ||
+| GPIO0| Held low for programming |Held low for programming|
+| GPIO1| TX for programming |TX for programming|
+| GPIO3| RX for programming |RX for programming|
 | GPIO4| Push button state |Push button state|
 |GPIO13| st25r3918 IRQ pin ||
 |GPIO14| st25r3918 i2c clock pin ||
