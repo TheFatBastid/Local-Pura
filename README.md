@@ -55,20 +55,20 @@ Antenna: https://www.molex.com/en-us/products/part-detail/1462360151
 Inital revision boards are white, Rev B boads are green. The only change seems to be changing out the LNK3209G mosfet IC at U2 for the LNK3205D mosfet at U9 (and appropriate caps, etc)
 <img src="revb pura mini.jpg">
 
-| Pin | Function |
-| --- | -------- |
-| GPIO0| Held low for programming |
-| GPIO1| TX for programming |
-| GPIO3| RX for programming |
-| GPIO4| Push button state |
-|GPIO13| st25r3918 IRQ pin |
-|GPIO14| st25r3918 i2c clock pin |
-|GPIO15| LED near the push button |
-|GPIO21| Heater |
-|GPIO22| Top LEDS |
-|GPIO27| st25r3918 i2c data pin|
-|GPIO34| Voltage sensing? |
-|GPIO35| Unknown |
-|GPIO36| Thermistor |
+| Pin | Mini Function | V4 function|
+| --- | -------- ||
+| GPIO0| Held low for programming ||
+| GPIO1| TX for programming ||
+| GPIO3| RX for programming ||
+| GPIO4| Push button state |Push button state|
+|GPIO13| st25r3918 IRQ pin ||
+|GPIO14| st25r3918 i2c clock pin ||
+|GPIO15| LED near the push button ||
+|GPIO21| Heater ||
+|GPIO22| Top LEDS ||
+|GPIO27| st25r3918 i2c data pin||
+|GPIO34| Voltage sensing? ||
+|GPIO35| Unknown ||
+|GPIO36| Thermistor ||
 
 Support me here https://ko-fi.com/thefatbastid
