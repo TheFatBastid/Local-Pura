@@ -1,0 +1,572 @@
+esphome:
+  name: pura-diffuser
+  friendly_name: Pura diffuser
+  on_boot:
+    - priority: -100
+      then:
+      - output.turn_off: heater_output_left
+      - output.turn_off: heater_output_right
+    - priority: 200
+      then:
+        - climate.control:
+            id: heater_climate_left
+            custom_preset: "Medium"
+        - climate.control:
+            id: heater_climate_right
+            custom_preset: "Medium"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+#  level: DEBUG
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Pura-Diffuser Fallback Hotspot"
+    password: !secret fallback_password
+
+captive_portal:
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [ st25r3918 ]
+
+st25r3918:
+  id: nfc_reader
+  irq_pin: GPIO27
+  sda_pin: 33
+  scl_pin: 32
+  update_interval: 500ms
+  carts:
+    - cart_id: "E002080AA155AA6F"
+      name: "Lemon"
+    - cart_id: "E002080E876EA3F4"
+      name: "Volcano"
+    - cart_id: "E002080F770791E3"
+      name: "Holiday"
+
+text_sensor:
+  - platform: st25r3918
+    fragrance_name:
+      name: "Fragrance name"
+    cart_id:
+      name: "Cart ID"
+
+binary_sensor:
+  - platform: st25r3918
+    tag_present:
+      name: "Cart present"
+
+  - platform: gpio
+    id: setup_button
+    name: "Setup Button"
+    pin:
+      number: GPIO4
+      mode: INPUT
+      inverted: true
+    filters:
+      - delayed_on: 20ms
+      - delayed_off: 20ms
+
+    on_multi_click:
+      # Short press: simple restart
+      - timing:
+          - ON for at most 1s
+          - OFF for at least 200ms
+        then:
+          - logger.log: "Short press: Restarting..."
+          - button.press: restart_btn
+
+      # Long press (5s): factory reset to provisioning mode
+      - timing:
+          - ON for at least 5s
+        then:
+          - logger.log: "Long press: Entering setup mode..."
+          # stop heat first
+          - switch.turn_off: diffuser_switch_left
+          - switch.turn_off: diffuser_switch_right
+          - output.turn_off: heater_output_left
+          - output.turn_off: heater_output_right
+
+          # flush usage so you don't lose up to ~60 seconds
+          - lambda: |-
+              id(nfc_reader).flush_usage();
+
+          # poison stored wifi so it *must* fall back to AP next boot
+          - wifi.configure:
+              ssid: "___PURA_SETUP___"
+              password: ""
+              save: true
+          - delay: 500ms
+          - button.press: restart_btn
+
+sensor:
+  - platform: st25r3918
+    usage_time:
+      name: "Fragrance runtime"
+    scent_remaining:
+      name: "Fragrance remaining"
+
+  - platform: adc
+    id: thermistor_adc_left
+    name: "Thermistor ADC Left"
+    pin: GPIO36
+    attenuation: 12db
+    update_interval: 5s
+
+  - platform: resistance
+    id: thermistor_resistance_left
+    name: "Thermistor Resistance_Left"
+    sensor: thermistor_adc_left
+    configuration: UPSTREAM
+    resistor: 5.36kOhm         
+
+  - platform: ntc
+    id: heater_temperature_left
+    name: "Heater Temperature Left"
+    sensor: thermistor_resistance_left
+    unit_of_measurement: "°C"
+    calibration:
+      b_constant: 3950
+      reference_temperature: 25°C
+      reference_resistance: 58kOhm
+    on_value_range:
+      - above: 90.0
+        then:
+          - logger.log: "SAFETY: Overtemp! Shutting heater down."
+          - output.turn_off: heater_output_left
+          - script.stop: heater_timer_left
+          - climate.control:
+              id: heater_climate_left
+              mode: "OFF"
+          - globals.set:
+              id: heater_on_left
+              value: 'false'
+          - lambda: 'id(nfc_reader).set_heating(false);'
+          - select.set:
+              id: diffuse_timer_left
+              option: "Off"
+
+  - platform: adc
+    id: thermistor_adc_right
+    name: "Thermistor ADC Right"
+    pin: GPIO39
+    attenuation: 12db
+    update_interval: 5s
+
+  - platform: resistance
+    id: thermistor_resistance_right
+    name: "Thermistor Resistance_Right"
+    sensor: thermistor_adc_right
+    configuration: UPSTREAM
+    resistor: 5.36kOhm         
+
+  - platform: ntc
+    id: heater_temperature_right
+    name: "Heater Temperature Right"
+    sensor: thermistor_resistance_right
+    unit_of_measurement: "°C"
+    calibration:
+      b_constant: 3950
+      reference_temperature: 25°C
+      reference_resistance: 58kOhm
+    on_value_range:
+      - above: 90.0
+        then:
+          - logger.log: "SAFETY: Overtemp! Shutting heater down."
+          - output.turn_off: heater_output_right
+          - script.stop: heater_timer_right
+          - climate.control:
+              id: heater_climate_right
+              mode: "OFF"
+          - globals.set:
+              id: heater_on_right
+              value: 'false'
+          - lambda: 'id(nfc_reader).set_heating(false);'
+          - select.set:
+              id: diffuse_timer_right
+              option: "Off"
+
+output:
+  - platform: gpio
+    id: heater_output_left
+    pin: GPIO22
+  - platform: gpio
+    id: heater_output_right
+    pin: GPIO23
+
+climate:
+  - platform: thermostat
+    id: heater_climate_left
+    internal: false
+    sensor: heater_temperature_left
+    default_preset: Medium
+    on_boot_restore_from: memory
+    heat_deadband: 1°C
+    heat_overrun: 1°C
+    min_heating_off_time: 10s
+    min_heating_run_time: 10s
+    min_idle_time: 0s
+    
+    visual:
+      min_temperature: 20°C
+      max_temperature: 90°C
+      temperature_step: 1°C
+    
+    heat_action:
+      - if:
+          condition:
+            lambda: 'return id(heater_on_left);'
+          then:
+            - logger.log:
+                format: "THERMOSTAT: HEAT ON"
+                level: WARN
+            - output.turn_on: heater_output_left
+
+    idle_action:
+      - if:
+          condition:
+            lambda: 'return id(heater_on_left);'
+          then:
+            - logger.log:
+                format: "THERMOSTAT: IDLE"
+                level: WARN
+            - output.turn_off: heater_output_left
+        
+    preset:
+      - name: Subtle
+        default_target_temperature_low: 63°C
+      - name: Medium
+        default_target_temperature_low: 71°C
+      - name: Strong
+        default_target_temperature_low: 80°C
+
+  - platform: thermostat
+    id: heater_climate_right
+    internal: false
+    sensor: heater_temperature_right
+    default_preset: Medium
+    on_boot_restore_from: memory
+    heat_deadband: 1°C
+    heat_overrun: 1°C
+    min_heating_off_time: 10s
+    min_heating_run_time: 10s
+    min_idle_time: 0s
+
+    visual:
+      min_temperature: 20°C
+      max_temperature: 90°C
+      temperature_step: 1°C
+
+    heat_action:
+      - if:
+          condition:
+            lambda: 'return id(heater_on_right);'
+          then:
+            - logger.log:
+                format: "THERMOSTAT: HEAT ON"
+                level: WARN
+            - output.turn_on: heater_output_right
+
+    idle_action:
+      - if:
+          condition:
+            lambda: 'return id(heater_on_right);'
+          then:
+            - logger.log:
+                format: "THERMOSTAT: IDLE"
+                level: WARN
+            - output.turn_off: heater_output_right
+
+    preset:
+      - name: Subtle
+        default_target_temperature_low: 63°C
+      - name: Medium
+        default_target_temperature_low: 71°C
+      - name: Strong
+        default_target_temperature_low: 80°C
+
+
+globals:
+  - id: heater_on_left
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: heater_on_right
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+
+select:
+  - platform: template
+    name: "Fragrance Strength Left"
+    id: strength_select_left
+    icon: "mdi:gauge"
+    optimistic: true
+    options: ["Subtle", "Medium", "Strong"]
+    initial_option: "Medium"
+    on_value:
+      then:
+        - climate.control:
+            id: heater_climate_left
+            custom_preset: !lambda 'return x;'
+        - if:
+            condition:
+              lambda: 'return id(heater_on_left);'
+            then:
+              - light.turn_on:
+                  id: top_leds
+                  brightness: !lambda |-
+                    if (x == "Subtle") return 0.33f;
+                    if (x == "Strong") return 1.0f;
+                    return 0.66f;
+  - platform: template
+    name: "Fragrance Strength Right"
+    id: strength_select_right
+    icon: "mdi:gauge"
+    optimistic: true
+    options: ["Subtle", "Medium", "Strong"]
+    initial_option: "Medium"
+    on_value:
+      then:
+        - climate.control:
+            id: heater_climate_right
+            custom_preset: !lambda 'return x;'
+        - if:
+            condition:
+              lambda: 'return id(heater_on_right);'
+            then:
+              - light.turn_on:
+                  id: top_leds
+                  brightness: !lambda |-
+                    if (x == "Subtle") return 0.33f;
+                    if (x == "Strong") return 1.0f;
+                    return 0.66f;
+
+  - platform: template
+    name: "Diffuse Timer Left"
+    id: diffuse_timer_left
+    icon: "mdi:timer-outline"
+    optimistic: true
+    options:
+      - "Off"
+      - "15 minutes"
+      - "30 minutes"
+      - "1 hour"
+    initial_option: "Off"
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: 'return x == "Off" && id(heater_on_left);'
+            then:
+              - script.stop: heater_timer_left
+              - switch.turn_off: diffuser_switch_left
+        - if:
+            condition:
+              lambda: 'return x == "15 minutes";'
+            then:
+              - script.execute:
+                  id: heater_timer_left
+                  duration_min: 15
+        - if:
+            condition:
+              lambda: 'return x == "30 minutes";'
+            then:
+              - script.execute:
+                  id: heater_timer_left
+                  duration_min: 30
+        - if:
+            condition:
+              lambda: 'return x == "1 hour";'
+            then:
+              - script.execute:
+                  id: heater_timer_left
+                  duration_min: 60
+
+  - platform: template
+    name: "Diffuse Timer Right"
+    id: diffuse_timer_right
+    icon: "mdi:timer-outline"
+    optimistic: true
+    options:
+      - "Off"
+      - "15 minutes"
+      - "30 minutes"
+      - "1 hour"
+    initial_option: "Off"
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: 'return x == "Off" && id(heater_on_right);'
+            then:
+              - script.stop: heater_timer_right
+              - switch.turn_off: diffuser_switch_right
+        - if:
+            condition:
+              lambda: 'return x == "15 minutes";'
+            then:
+              - script.execute:
+                  id: heater_timer_right
+                  duration_min: 15
+        - if:
+            condition:
+              lambda: 'return x == "30 minutes";'
+            then:
+              - script.execute:
+                  id: heater_timer_right
+                  duration_min: 30
+        - if:
+            condition:
+              lambda: 'return x == "1 hour";'
+            then:
+              - script.execute:
+                  id: heater_timer_right
+                  duration_min: 60
+button:
+  - platform: restart
+    id: restart_btn
+    name: "Reprovision"
+
+switch:
+  - platform: template
+    name: "Diffuser Left"
+    id: diffuser_switch_left
+    icon: "mdi:scent"
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: 'return id(heater_on_left);'
+    turn_on_action:
+      - globals.set:
+          id: heater_on_left
+          value: 'true'
+      - lambda: 'id(nfc_reader).set_heating(true);'
+      - climate.control:
+          id: heater_climate_left
+          mode: HEAT
+      - light.turn_on:
+          id: top_leds
+          brightness: !lambda |-
+            auto strength = id(strength_select_left).current_option();
+            if (strength == "Subtle") return 0.33f;
+            if (strength == "Strong") return 1.0f;
+            return 0.66f;
+          red: 1.0
+          green: 0.5
+          blue: 0.0
+    turn_off_action:
+      - globals.set:
+          id: heater_on_left
+          value: 'false'
+      - lambda: 'id(nfc_reader).set_heating(false);'
+      - climate.control:
+          id: heater_climate_left
+          mode: "OFF"
+      - output.turn_off: heater_output_left
+      - script.stop: heater_timer_left
+      - light.turn_off: top_leds
+      - select.set:
+          id: diffuse_timer_left
+          option: "Off"
+
+  - platform: template
+    name: "Diffuser Right"
+    id: diffuser_switch_right
+    icon: "mdi:scent"
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: 'return id(heater_on_right);'
+    turn_on_action:
+      - globals.set:
+          id: heater_on_right
+          value: 'true'
+      - lambda: 'id(nfc_reader).set_heating(true);'
+      - climate.control:
+          id: heater_climate_right
+          mode: HEAT
+      - light.turn_on:
+          id: top_leds
+          brightness: !lambda |-
+            auto strength = id(strength_select_right).current_option();
+            if (strength == "Subtle") return 0.33f;
+            if (strength == "Strong") return 1.0f;
+            return 0.66f;
+          red: 1.0
+          green: 0.5
+          blue: 0.0
+    turn_off_action:
+      - globals.set:
+          id: heater_on_right
+          value: 'false'
+      - lambda: 'id(nfc_reader).set_heating(false);'
+      - climate.control:
+          id: heater_climate_right
+          mode: "OFF"
+      - output.turn_off: heater_output_right
+      - script.stop: heater_timer_right
+      - light.turn_off: top_leds
+      - select.set:
+          id: diffuse_timer_right
+          option: "Off"
+
+script:
+  - id: heater_timer_left
+    mode: restart
+    parameters:
+      duration_min: int
+    then:
+      - switch.turn_on: diffuser_switch_left
+      - delay: !lambda "return duration_min * 60 * 1000;"
+      - switch.turn_off: diffuser_switch_left
+      - select.set:
+          id: diffuse_timer_left
+          option: "Off"
+  - id: heater_timer_right
+    mode: restart
+    parameters:
+      duration_min: int
+    then:
+      - switch.turn_on: diffuser_switch_right
+      - delay: !lambda "return duration_min * 60 * 1000;"
+      - switch.turn_off: diffuser_switch_right
+      - select.set:
+          id: diffuse_timer_right
+          option: "Off"
+
+light:
+  - platform: esp32_rmt_led_strip
+    # Not yet working, may be a different GPIO
+    name: "Button LED"
+    id: button_led
+    pin: GPIO15
+    num_leds: 1
+    rgb_order: RGB
+    chipset: WS2812
+    entity_category: config
+
+  - platform: esp32_rmt_led_strip
+    name: "Top LEDs"
+    id: top_leds
+    pin: GPIO25
+    num_leds: 6
+    rgb_order: GRB
+    chipset: WS2812
+    entity_category: config
