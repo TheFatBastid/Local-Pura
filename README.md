@@ -29,10 +29,9 @@ I am a bad programmer, this will burn down your house, don't blame me.
 1) Scent names come from their website, so you will need to build a local database. If you know of more please add them here!
 2) Pura says they have some fancy-pants tech that diffuses different scents differently. Shrug. All I do is turn the heat to 3 different levels.
 3) Made up my own calculations for % left based on: "With a Pura Mini, a fragrance vial lasts about 30 days in a small space, diffusing 6–8 hours per day at medium intensity."
-4) This is only for the Mini right now. Someone send me the others to work on!
-5) GPIO34 reads a divided down voltage but I didn't know what to do with that.
-6) I can not find any connection that GPIO35 makes.
-7) I am bad at programming.
+4) GPIO34 reads a divided down voltage but I didn't know what to do with that.
+5) I can not find any connection that GPIO35 makes.
+6) I am bad at programming.
 
    
 Could not be done with the work of:
