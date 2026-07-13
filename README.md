@@ -118,6 +118,11 @@ The tabletop Pura Plus is USB-C powered, with two cart bays, two WS2812
 top LEDs, two capacitive buttons and a fan. Different board and pinout from the
 Pura 4. Use `pura-plus.yaml`.
 
+The programming pads are broken out on the back of the board (RX, TX, 3.3V,
+I/O0, GND):
+
+<img src="pura-plus.jpg">
+
 Both bays are read independently via the dual-bay NFC support (RFO1 / RFO2
 antenna switching on the single ST25R3918). `GPIO34` — listed as unknown in the
 Pura 4 notes above — is a board/model-revision voltage divider; one ADC read at
