@@ -75,7 +75,7 @@ to be changing out the LNK3209G mosfet IC at U2 for the LNK3205D mosfet at U9
 |GPIO21| Heater |
 |GPIO22| Top LEDS |
 |GPIO27| st25r3918 i2c data pin|
-|GPIO34| Voltage sensing? |
+|GPIO34| Voltage divider — likely board-revision sensing (confirmed on the Plus/Wall; not verified on the Mini) |
 |GPIO35| Unknown |
 |GPIO36| Thermistor |
 
@@ -111,12 +111,18 @@ following the examples in `secrets.yaml.example`
 * The usage check doesn't really work since there are two cart slots
 * The cart read only seems to work from the right slot
 
+> Both of these are addressed by the dual-bay NFC support added below for the
+> Pura Plus / Wall V4: the driver alternates the two antennas (RFO1 / RFO2) so it
+> reads **both** slots, and tracks usage per bay. The Pura 4 uses the same
+> ST25R3918, so wiring up the per-bay sensors should carry over — though I've only
+> verified it on the Plus and Wall.
+
 
 ## Pura Plus
 
-The tabletop Pura Plus is USB-C powered, with two cart bays, two WS2812
-top LEDs, two capacitive buttons and a fan. Different board and pinout from the
-Pura 4. Use `pura-plus.yaml`.
+The tabletop Pura Plus is USB-C powered, with two cart bays, two capacitive
+buttons (each with a WS2812 LED behind its translucent cap), and a fan.
+Different board and pinout from the Pura 4. Use `pura-plus.yaml`.
 
 The programming pads are broken out on the back of the board (RX, TX, 3.3V,
 I/O0, GND):
@@ -139,7 +145,7 @@ Plus, ~0.14 V on the Wall V4).
 | GPIO14 | fan |
 | GPIO15 | left button |
 | GPIO18 | st25r3918 i2c data (SDA) |
-| GPIO21 | top LEDs (2x WS2812) |
+| GPIO21 | 2x WS2812, one behind each translucent button cap |
 | GPIO26 | accelerometer INT |
 | GPIO27 | st25r3918 IRQ pin |
 | GPIO34 | board-revision voltage divider (~0.81 V) |
@@ -164,7 +170,7 @@ OTA afterwards. Treat the board as live.
 | GPIO4  | button |
 | GPIO22 | left heater |
 | GPIO23 | right heater |
-| GPIO25 | top LEDs (6x WS2812 ring) |
+| GPIO25 | 6x WS2812 LED ring |
 | GPIO27 | st25r3918 IRQ pin |
 | GPIO32 | st25r3918 i2c clock (SCL) |
 | GPIO33 | st25r3918 i2c data (SDA) |
