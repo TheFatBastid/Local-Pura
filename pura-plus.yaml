@@ -1,5 +1,5 @@
 # ============================================================
-#  Pura Pro / Plus  ->  ESPHome
+#  Pura Plus  ->  ESPHome
 #  Heaters 12/13 (mutex, bang-bang regulator) · Thermistors 36/39
 #  Fan 14 · LEDs 21(x2, white, DnD) · Buttons 15(L)/4(R)
 #  NFC I2C SDA18/SCL5 IRQ27 · Accel INT 26 · CryptoAuth 0x36 (unused)
