@@ -1,4 +1,5 @@
 #include "st25r3918_component.h"
+#include "st25r3918_com.h"   // register defines (IO_CONF1, rfo2, ...)
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"
 #include "esphome/core/hal.h"
@@ -77,8 +78,46 @@ void ST25R3918Component::update() {
   // Update usage time tracking
   this->update_usage_time_();
 
+  // Dual-bay: expire a bay if its tag hasn't been seen recently ("empty" detection)
+  uint32_t now = millis();
+  for (int b = 0; b < 2; b++) {
+    if (this->bay_present_[b] && (now - this->bay_last_seen_[b] > BAY_TIMEOUT_MS)) {
+      this->bay_present_[b] = false;
+      this->bay_cart_id_[b][0] = '\0';
+      this->bay_frag_[b][0] = '\0';
+    }
+  }
+
   // Publish sensor values
   this->publish_sensors_();
+
+  // Flip to the other antenna (RFO1<->RFO2) for the next poll window
+  this->current_bay_ ^= 1;
+  this->select_antenna_(this->current_bay_);
+  this->restart_discovery_();
+}
+
+void ST25R3918Component::select_antenna_(uint8_t bay) {
+  if (this->rfal_hardware_ == nullptr) {
+    return;
+  }
+  // single=1 = single-ended mode where rfo2 picks which antenna (RFO1 vs RFO2)
+  // is driven. Both bits must be set together or the chip stays differential
+  // (one antenna) and rfo2 has no effect.
+  uint8_t mask = ST25R3918_REG_IO_CONF1_single | ST25R3918_REG_IO_CONF1_rfo2;
+  uint8_t val = ST25R3918_REG_IO_CONF1_single | ((bay & 1) ? ST25R3918_REG_IO_CONF1_rfo2 : 0x00);
+  this->rfal_hardware_->st25r3918ChangeRegisterBits(ST25R3918_REG_IO_CONF1, mask, val);
+  uint8_t rb = 0;
+  this->rfal_hardware_->st25r3918ReadRegister(ST25R3918_REG_IO_CONF1, &rb);
+  ESP_LOGD(TAG, "antenna -> bay %u  IO_CONF1=0x%02X", bay, rb);
+}
+
+void ST25R3918Component::restart_discovery_() {
+  if (this->rfal_nfc_ == nullptr) {
+    return;
+  }
+  this->rfal_nfc_->rfalNfcDeactivate(true);
+  this->rfal_nfc_->rfalNfcDiscover(&this->disc_param_);
 }
 
 bool ST25R3918Component::init_rfal_() {
@@ -156,7 +195,8 @@ bool ST25R3918Component::init_rfal_() {
   ESP_LOGI(TAG, "Discovery config: techs2Find=0x%04X, duration=%dms",
            discParam.techs2Find, discParam.totalDuration);
 
-  // Start discovery
+  // Start discovery (keep params so we can re-discover after each antenna flip)
+  this->disc_param_ = discParam;
   ESP_LOGD(TAG, "Starting NFC discovery...");
   err = this->rfal_nfc_->rfalNfcDiscover(&discParam);
   if (err != ERR_NONE) {
@@ -229,6 +269,17 @@ void ST25R3918Component::handle_nfc_state_(rfalNfcState state, rfalNfcDevice *nf
           // Update last detected tag
           memcpy(this->last_detected_uid_, this->last_uid_, this->last_uid_len_);
           this->last_detected_uid_len_ = this->last_uid_len_;
+        }
+
+        // Attribute this detection to the currently-selected bay + refresh "last seen"
+        {
+          uint8_t b = this->current_bay_ & 1;
+          strncpy(this->bay_cart_id_[b], this->cart_id_, sizeof(this->bay_cart_id_[b]) - 1);
+          this->bay_cart_id_[b][sizeof(this->bay_cart_id_[b]) - 1] = '\0';
+          strncpy(this->bay_frag_[b], this->fragrance_name_, sizeof(this->bay_frag_[b]) - 1);
+          this->bay_frag_[b][sizeof(this->bay_frag_[b]) - 1] = '\0';
+          this->bay_present_[b] = true;
+          this->bay_last_seen_[b] = millis();
         }
 
         // Deactivate and restart discovery
@@ -355,10 +406,27 @@ void ST25R3918Component::publish_sensors_() {
       this->cart_id_sensor_->publish_state(id);
     }
   }
+  // Per-bay cart id / fragrance (empty string when that bay has no cart)
+  for (int b = 0; b < 2; b++) {
+    if (this->cart_id_bay_sensor_[b] != nullptr) {
+      std::string id = this->bay_present_[b] ? this->bay_cart_id_[b] : "";
+      if (this->cart_id_bay_sensor_[b]->state != id) this->cart_id_bay_sensor_[b]->publish_state(id);
+    }
+    if (this->fragrance_bay_sensor_[b] != nullptr) {
+      std::string nm = this->bay_present_[b] ? this->bay_frag_[b] : "";
+      if (this->fragrance_bay_sensor_[b]->state != nm) this->fragrance_bay_sensor_[b]->publish_state(nm);
+    }
+  }
 #endif
 #ifdef USE_BINARY_SENSOR
+  bool any_present = this->bay_present_[0] || this->bay_present_[1];
   if (this->tag_present_sensor_ != nullptr) {
-    this->tag_present_sensor_->publish_state(this->tag_present_);
+    this->tag_present_sensor_->publish_state(any_present);
+  }
+  for (int b = 0; b < 2; b++) {
+    if (this->present_bay_sensor_[b] != nullptr) {
+      this->present_bay_sensor_[b]->publish_state(this->bay_present_[b]);
+    }
   }
 #endif
 #ifdef USE_SENSOR
@@ -416,7 +484,7 @@ void ST25R3918Component::update_usage_time_() {
 }
 
 void ST25R3918Component::load_usage_data_() {
-  Preferences prefs;
+  ::Preferences prefs;
   if (prefs.begin("pura_usage", true)) {  // true = read-only
     // Load usage for each configured cart
     for (const auto &pair : this->configured_cart_names_) {
@@ -431,7 +499,7 @@ void ST25R3918Component::load_usage_data_() {
 }
 
 void ST25R3918Component::save_usage_data_() {
-  Preferences prefs;
+  ::Preferences prefs;
   if (prefs.begin("pura_usage", false)) {
     for (const auto &pair : this->cart_usage_seconds_) {
       prefs.putUInt(pair.first.c_str(), pair.second);

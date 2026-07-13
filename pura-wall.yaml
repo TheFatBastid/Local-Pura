@@ -1,0 +1,387 @@
+# ============================================================
+#  Pura WALL V4  ->  ESPHome   (MAINS powered — LNK625DG)
+#  Pin map = Pura 4 family:
+#    Heaters 22/23 · Thermistors 36/39 · NO fan (heat-only)
+#    Top LEDs = GPIO25 (6x WS2812, shared ring) · Button = GPIO4
+#    NFC I2C SDA33/SCL5=32 IRQ27 · dual-bay (pogo antennas)
+#
+#  Safety: bang-bang regulator (NOT the thermostat platform, which
+#  overshot to 114 C on the Plus) — NaN->off, 90 C hard cutoff,
+#  median-filtered ADC.  Heaters forced off on boot; bays default
+#  OFF.  FIRST HEAT CYCLE MUST BE SUPERVISED.
+#
+#  HA controls: Left bay · Right bay · Do not disturb · Run time.
+#  Timer auto-offs a manual activation (button/card).
+# ============================================================
+esphome:
+  name: pura-wall-4
+  friendly_name: Pura Wall 4
+  on_boot:
+    priority: -100
+    then:
+      - output.turn_off: heater_left
+      - output.turn_off: heater_right
+      - light.turn_on: {id: top_leds, effect: "Manager"}   # always-on status/render effect
+
+esp32:
+  board: esp32dev
+  framework: {type: arduino}
+
+logger:
+api:
+  encryption: {key: !secret encryption_key}
+ota:
+  - platform: esphome
+    password: !secret ota_password
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap: {ssid: "Pura-Wall Fallback", password: !secret fallback_password}
+captive_portal:
+
+# ---------------- NFC reader (dual-bay) ----------------
+external_components:
+  - source: {type: local, path: components}
+    components: [st25r3918]
+
+st25r3918:
+  id: nfc_reader
+  irq_pin: GPIO27
+  sda_pin: 33
+  scl_pin: 32
+  update_interval: 500ms
+  # Optional: a `carts:` list maps specific cart UIDs to friendly names.
+  # Omitted here — the per-bay sensors report the raw UID without it.
+
+globals:
+  - {id: on_left,      type: bool,  restore_value: false, initial_value: 'false'}
+  - {id: on_right,     type: bool,  restore_value: false, initial_value: 'false'}
+  - {id: target_left,  type: float, restore_value: true,  initial_value: '71.0'}
+  - {id: target_right, type: float, restore_value: true,  initial_value: '71.0'}
+  - {id: leds_enabled,   type: bool, restore_value: true,  initial_value: 'true'}   # false = Do Not Disturb
+  - {id: ever_connected, type: bool, restore_value: false, initial_value: 'false'}  # HA seen since boot? rainbow vs red
+
+# ---------------- Outputs (heaters) ----------------
+output:
+  - {platform: gpio, id: heater_left,  pin: GPIO22}
+  - {platform: gpio, id: heater_right, pin: GPIO23}
+
+# ---------------- LEDs (6-pixel ring) — rendered by one always-on "Manager" effect ----------------
+# Per-frame priority: DnD>off · no-HA>rainbow(new)/red-bounce(lost) · diffusing>white|orange-low · idle>off
+light:
+  - platform: esp32_rmt_led_strip
+    id: top_leds
+    name: "Top LEDs"
+    internal: true
+    pin: GPIO25
+    num_leds: 6
+    chipset: WS2812
+    rgb_order: GRB
+    default_transition_length: 0s
+    effects:
+      - addressable_lambda:
+          name: "Manager"
+          update_interval: 40ms
+          lambda: |-
+            uint32_t t = millis();
+            if (!id(leds_enabled)) { it.all() = Color::BLACK; return; }        // DnD
+            if (!id(api_status).state) {                                       // no HA link
+              if (id(ever_connected)) {                                        // lost -> red bounce chase
+                int n = it.size();
+                int period = (n - 1) * 2;
+                int tt = (t / 90) % period;
+                int pos = (tt < n) ? tt : (period - tt);
+                it.all() = Color::BLACK;
+                it[pos] = Color(255,0,0);
+                int trail = pos - ((tt < n) ? 1 : -1);
+                if (trail >= 0 && trail < n) it[trail] = Color(60,0,0);
+              } else {                                                         // first connect -> rainbow wash
+                uint8_t base = (t / 20) & 0xFF;
+                for (int i = 0; i < it.size(); i++)
+                  it[i] = ESPHSVColor(base + i * (255 / it.size()), 255, 255).to_rgb();
+              }
+              return;
+            }
+            if (id(on_left) || id(on_right)) {                                 // diffusing
+              float rem = id(scent_rem).state;
+              if (!isnan(rem) && rem <= 10.0f) {                               // low -> orange breathing
+                float ph = sinf(t / 400.0f) * 0.5f + 0.5f;
+                uint8_t b = 20 + (uint8_t)(ph * 220);
+                it.all() = Color(b, (uint8_t)(b * 45 / 255), 0);
+                return;
+              }
+              auto s = id(on_left) ? id(strength_left).state : id(strength_right).state;
+              float br = (s == "Subtle") ? 0.33f : (s == "Strong") ? 1.0f : 0.66f;
+              uint8_t w = (uint8_t)(br * 255);
+              it.all() = Color(w,w,w);                                         // shared ring white
+              return;
+            }
+            it.all() = Color::BLACK;                                           // idle
+
+# ---------------- Sensors ----------------
+sensor:
+  - platform: st25r3918
+    usage_time: {name: "Fragrance runtime", entity_category: diagnostic}
+    scent_remaining: {name: "Fragrance remaining", id: scent_rem}   # % — low warning + tile colour
+  # Hardware-version divider (GPIO34) — voltage identifies the model/board rev
+  - platform: adc
+    pin: GPIO34
+    id: hw_version_v
+    name: "HW version voltage"
+    attenuation: 12db
+    update_interval: 30s
+    accuracy_decimals: 3
+    entity_category: diagnostic
+  - platform: adc
+    id: adc_left
+    pin: GPIO36
+    attenuation: 12db
+    update_interval: 100ms
+    internal: true
+    filters:
+      - median: {window_size: 9, send_every: 10, send_first_at: 5}
+  - {platform: resistance, id: res_left,  sensor: adc_left,  configuration: UPSTREAM, resistor: 5.36kOhm, internal: true}
+  - platform: ntc
+    id: temp_left
+    name: "Left bay temperature"
+    sensor: res_left
+    unit_of_measurement: "°C"
+    entity_category: diagnostic
+    calibration: {b_constant: 3950, reference_temperature: 25°C, reference_resistance: 58kOhm}
+    on_value_range:
+      - above: 90.0
+        then: [{switch.turn_off: diffuser_left}]     # redundant hard backstop
+  - platform: adc
+    id: adc_right
+    pin: GPIO39
+    attenuation: 12db
+    update_interval: 100ms
+    internal: true
+    filters:
+      - median: {window_size: 9, send_every: 10, send_first_at: 5}
+  - {platform: resistance, id: res_right, sensor: adc_right, configuration: UPSTREAM, resistor: 5.36kOhm, internal: true}
+  - platform: ntc
+    id: temp_right
+    name: "Right bay temperature"
+    sensor: res_right
+    unit_of_measurement: "°C"
+    entity_category: diagnostic
+    calibration: {b_constant: 3950, reference_temperature: 25°C, reference_resistance: 58kOhm}
+    on_value_range:
+      - above: 90.0
+        then: [{switch.turn_off: diffuser_right}]
+
+text_sensor:
+  - platform: template
+    name: "Model"
+    icon: mdi:chip
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      float v = id(hw_version_v).state;
+      if (isnan(v)) return {};                 // keep previous until ADC settles
+      if (v < 0.45) return {"Pura Wall 4"};    // ~0.14 V
+      if (v < 1.20) return {"Pura Plus"};      // ~0.81 V
+      return {"Unknown"};
+  - platform: st25r3918
+    cart_id_bay1: {name: "Bay 1 cart ID"}
+    cart_id_bay2: {name: "Bay 2 cart ID"}
+    fragrance_name_bay1: {name: "Bay 1 fragrance"}
+    fragrance_name_bay2: {name: "Bay 2 fragrance"}
+
+binary_sensor:
+  - platform: st25r3918
+    present_bay1: {name: "Bay 1 present"}
+    present_bay2: {name: "Bay 2 present"}
+    tag_present: {name: "Any cart present", entity_category: diagnostic}
+  - platform: status
+    id: api_status
+    name: "Status"
+    entity_category: diagnostic
+    on_state:
+      - if: {condition: {lambda: 'return x;'}, then: [{globals.set: {id: ever_connected, value: 'true'}}]}
+  - platform: template
+    name: "Fragrance low"
+    id: frag_low
+    device_class: problem
+    lambda: |-
+      float r = id(scent_rem).state;
+      if (isnan(r)) return {};
+      return r <= 10.0;
+  - platform: gpio
+    id: setup_button
+    name: "Button"
+    internal: true                     # physical button — no HA entity
+    pin: {number: GPIO4, mode: INPUT_PULLUP, inverted: true}
+    filters: [{delayed_on: 20ms}, {delayed_off: 20ms}]
+    on_multi_click:
+      - timing: [ON for at most 1s, OFF for at least 200ms]
+        then: [{switch.toggle: left_bay_timed}]       # short press: toggle left bay (arms timer)
+      - timing: [ON for at least 5s]                  # long press: reprovision WiFi
+        then:
+          - switch.turn_off: diffuser_left
+          - switch.turn_off: diffuser_right
+          - lambda: 'id(nfc_reader).flush_usage();'
+          - wifi.configure: {ssid: "___PURA_SETUP___", password: "", save: true}
+          - delay: 500ms
+          - button.press: restart_btn
+
+# ---------------- Per-bay strength (target temp) + Run time ----------------
+select:
+  - platform: template
+    name: "Left strength"
+    id: strength_left
+    optimistic: true
+    entity_category: config
+    options: ["Subtle", "Medium", "Strong"]
+    initial_option: "Medium"
+    on_value:
+      - lambda: 'id(target_left) = (x=="Subtle")?63.0 : (x=="Strong")?80.0 : 71.0;'
+  - platform: template
+    name: "Right strength"
+    id: strength_right
+    optimistic: true
+    entity_category: config
+    options: ["Subtle", "Medium", "Strong"]
+    initial_option: "Medium"
+    on_value:
+      - lambda: 'id(target_right) = (x=="Subtle")?63.0 : (x=="Strong")?80.0 : 71.0;'
+  - platform: template
+    name: "Run time"
+    id: run_time
+    icon: mdi:timer-outline
+    optimistic: true
+    restore_value: true
+    options: ["30 min", "60 min", "90 min", "Always on"]
+    initial_option: "60 min"
+    on_value:
+      - if:
+          condition: {lambda: 'return x == "Always on";'}
+          then: [{script.stop: autooff_left}, {script.stop: autooff_right}]
+          else:
+            - if: {condition: {lambda: 'return id(on_left);'},  then: [{script.execute: autooff_left}]}
+            - if: {condition: {lambda: 'return id(on_right);'}, then: [{script.execute: autooff_right}]}
+
+# ---------------- Auto-off timers ----------------
+script:
+  - id: autooff_left
+    mode: restart
+    then:
+      - delay: !lambda |-
+          auto s = id(run_time).state;
+          if (s == "30 min") return 1800000UL;
+          if (s == "90 min") return 5400000UL;
+          return 3600000UL;
+      - switch.turn_off: diffuser_left
+  - id: autooff_right
+    mode: restart
+    then:
+      - delay: !lambda |-
+          auto s = id(run_time).state;
+          if (s == "30 min") return 1800000UL;
+          if (s == "90 min") return 5400000UL;
+          return 3600000UL;
+      - switch.turn_off: diffuser_right
+
+# ---------------- Heater regulator (bang-bang + safety) ----------------
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          // LEFT
+          if (id(on_left)) {
+            float t = id(temp_left).state;
+            if (isnan(t)) { id(heater_left).turn_off(); }
+            else if (t >= 90.0) { id(heater_left).turn_off(); id(diffuser_left).turn_off(); }
+            else if (t < id(target_left) - 1.0) { id(heater_left).turn_on(); }
+            else if (t > id(target_left)) { id(heater_left).turn_off(); }
+          }
+          // RIGHT
+          if (id(on_right)) {
+            float t = id(temp_right).state;
+            if (isnan(t)) { id(heater_right).turn_off(); }
+            else if (t >= 90.0) { id(heater_right).turn_off(); id(diffuser_right).turn_off(); }
+            else if (t < id(target_right) - 1.0) { id(heater_right).turn_on(); }
+            else if (t > id(target_right)) { id(heater_right).turn_off(); }
+          }
+
+# ---------------- Switches ----------------
+# (shared top ring is set inline in each bay's turn_on: white, brightness by strength)
+switch:
+  - platform: template
+    name: "Left bay"
+    id: diffuser_left
+    icon: mdi:scent
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: 'return id(on_left);'
+    turn_on_action:
+      - switch.turn_off: diffuser_right          # one bay at a time
+      - globals.set: {id: on_left, value: 'true'}
+      - lambda: 'id(nfc_reader).set_heating(true);'
+      # LEDs rendered by the Manager effect; auto-off armed only on manual paths (left_bay_timed)
+    turn_off_action:
+      - globals.set: {id: on_left, value: 'false'}
+      - script.stop: autooff_left
+      - output.turn_off: heater_left
+      - lambda: 'id(nfc_reader).set_heating(false);'
+  - platform: template
+    name: "Right bay"
+    id: diffuser_right
+    icon: mdi:scent
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: 'return id(on_right);'
+    turn_on_action:
+      - switch.turn_off: diffuser_left
+      - globals.set: {id: on_right, value: 'true'}
+      - lambda: 'id(nfc_reader).set_heating(true);'
+      # LEDs via Manager effect; auto-off armed only on manual paths (right_bay_timed)
+    turn_off_action:
+      - globals.set: {id: on_right, value: 'false'}
+      - script.stop: autooff_right
+      - output.turn_off: heater_right
+      - lambda: 'id(nfc_reader).set_heating(false);'
+  # Do Not Disturb: ON = suppress the top ring even while diffusing
+  - platform: template
+    name: "Do not disturb"
+    id: dnd_switch
+    icon: mdi:sleep
+    restore_mode: DISABLED
+    lambda: 'return !id(leds_enabled);'
+    turn_on_action:
+      - globals.set: {id: leds_enabled, value: 'false'}    # Manager renders black
+    turn_off_action:
+      - globals.set: {id: leds_enabled, value: 'true'}     # Manager restores per state
+  # Card/physical-button toggle that ARMS the auto-off on turn-on (plain off on turn-off).
+  # Mirrors bay state. Schedules use switch.diffuser_left/right (raw) and stay uncut.
+  - platform: template
+    name: "Left bay timed"
+    id: left_bay_timed
+    icon: mdi:timer-cog
+    entity_category: config
+    lambda: 'return id(on_left);'
+    turn_on_action:
+      - switch.turn_on: diffuser_left
+      - if:
+          condition: {lambda: 'return id(run_time).state != "Always on";'}
+          then: [{script.execute: autooff_left}]
+    turn_off_action:
+      - switch.turn_off: diffuser_left
+  - platform: template
+    name: "Right bay timed"
+    id: right_bay_timed
+    icon: mdi:timer-cog
+    entity_category: config
+    lambda: 'return id(on_right);'
+    turn_on_action:
+      - switch.turn_on: diffuser_right
+      - if:
+          condition: {lambda: 'return id(run_time).state != "Always on";'}
+          then: [{script.execute: autooff_right}]
+    turn_off_action:
+      - switch.turn_off: diffuser_right
+
+button:
+  - platform: restart
+    id: restart_btn
+    name: "Restart"
+    entity_category: diagnostic

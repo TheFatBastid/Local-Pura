@@ -49,3 +49,6 @@ async def to_code(config):
     # Add configured cart names
     for cart in config[CONF_CARTS]:
         cg.add(var.add_cart_name(cart[CONF_CART_ID], cart[CONF_NAME]))
+    cg.add_library("SPI", None)
+    cg.add_library("Wire", None)
+    cg.add_library("Preferences", None)
