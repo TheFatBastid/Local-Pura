@@ -120,7 +120,7 @@ following the examples in `secrets.yaml.example`
 
 ## Pura Plus
 
-The tabletop Pura Plus is USB-C powered, with two cart bays, two capacitive
+The tabletop Pura Plus is USB-C powered, with two cart bays, two mechanical push
 buttons (each with a WS2812 LED behind its translucent cap), and a fan.
 Different board and pinout from the Pura 4. Use `pura-plus.yaml`.
 
