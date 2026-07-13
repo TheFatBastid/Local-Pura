@@ -2,10 +2,10 @@
 
 ## Summary
 
-This allows for the use of the Pura Mini, Pura 4, Pura Plus / Pro or Pura Wall V4
+This allows for the use of the Pura Mini, Pura 4, Pura Plus or Pura Wall V4
 diffuser with Home Assistant via ESPhome. All Local control, no more cloud needed.
 
-The two-bay models (Plus / Pro and Wall V4) read both cartridge bays
+The two-bay models (Plus and Wall V4) read both cartridge bays
 independently — the single ST25R3918 drives two single-ended antennas (RFO1 /
 RFO2) and the driver alternates between them.
 
@@ -112,9 +112,9 @@ following the examples in `secrets.yaml.example`
 * The cart read only seems to work from the right slot
 
 
-## Pura Plus / Pro
+## Pura Plus
 
-The tabletop Pura Plus / Pro is USB-C powered, with two cart bays, two WS2812
+The tabletop Pura Plus is USB-C powered, with two cart bays, two WS2812
 top LEDs, two capacitive buttons and a fan. Different board and pinout from the
 Pura 4. Use `pura-plus.yaml`.
 
