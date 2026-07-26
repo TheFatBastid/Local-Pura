@@ -43,9 +43,12 @@ class ST25R3918Component : public PollingComponent {
 #ifdef USE_TEXT_SENSOR
   void set_fragrance_name_sensor(text_sensor::TextSensor *sensor) { this->fragrance_name_sensor_ = sensor; }
   void set_cart_id_sensor(text_sensor::TextSensor *sensor) { this->cart_id_sensor_ = sensor; }
+  void set_cart_id_bay_sensor(int bay, text_sensor::TextSensor *sensor) { this->cart_id_bay_sensor_[bay] = sensor; }
+  void set_fragrance_bay_sensor(int bay, text_sensor::TextSensor *sensor) { this->fragrance_bay_sensor_[bay] = sensor; }
 #endif
 #ifdef USE_BINARY_SENSOR
   void set_tag_present_sensor(binary_sensor::BinarySensor *sensor) { this->tag_present_sensor_ = sensor; }
+  void set_present_bay_sensor(int bay, binary_sensor::BinarySensor *sensor) { this->present_bay_sensor_[bay] = sensor; }
 #endif
 #ifdef USE_SENSOR
   void set_usage_time_sensor(sensor::Sensor *sensor) { this->usage_time_sensor_ = sensor; }
@@ -93,6 +96,15 @@ class ST25R3918Component : public PollingComponent {
   uint8_t last_detected_uid_[10];
   uint8_t last_detected_uid_len_{0};
 
+  // Dual-bay support via RFO1/RFO2 antenna switching (IO_CONF1 bit rfo2)
+  uint8_t current_bay_{0};
+  rfalNfcDiscoverParam disc_param_{};
+  char bay_cart_id_[2][32]{};
+  char bay_frag_[2][64]{};
+  bool bay_present_[2]{false, false};
+  uint32_t bay_last_seen_[2]{0, 0};
+  static constexpr uint32_t BAY_TIMEOUT_MS = 3000;
+
   // Boot delay tracking
   uint32_t boot_time_{0};
 
@@ -113,9 +125,12 @@ class ST25R3918Component : public PollingComponent {
 #ifdef USE_TEXT_SENSOR
   text_sensor::TextSensor *fragrance_name_sensor_{nullptr};
   text_sensor::TextSensor *cart_id_sensor_{nullptr};
+  text_sensor::TextSensor *cart_id_bay_sensor_[2]{nullptr, nullptr};
+  text_sensor::TextSensor *fragrance_bay_sensor_[2]{nullptr, nullptr};
 #endif
 #ifdef USE_BINARY_SENSOR
   binary_sensor::BinarySensor *tag_present_sensor_{nullptr};
+  binary_sensor::BinarySensor *present_bay_sensor_[2]{nullptr, nullptr};
 #endif
 #ifdef USE_SENSOR
   sensor::Sensor *usage_time_sensor_{nullptr};
@@ -130,6 +145,8 @@ class ST25R3918Component : public PollingComponent {
   void update_usage_time_();
   void load_usage_data_();
   void save_usage_data_();
+  void select_antenna_(uint8_t bay);
+  void restart_discovery_();
 
   // Static callback for RFAL
   static void nfc_callback_(rfalNfcState state);

@@ -2,8 +2,12 @@
 
 ## Summary
 
-This allows for the use of the Pura Mini or Pura 4 diffuser with Home Assistant
-via ESPhome. All Local control, no more cloud needed.
+This allows for the use of the Pura Mini, Pura 4, Pura Plus or Pura Wall V4
+diffuser with Home Assistant via ESPhome. All Local control, no more cloud needed.
+
+The two-bay models (Plus and Wall V4) read both cartridge bays
+independently — the single ST25R3918 drives two single-ended antennas (RFO1 /
+RFO2) and the driver alternates between them.
 
 ## Setup
 
@@ -71,7 +75,7 @@ to be changing out the LNK3209G mosfet IC at U2 for the LNK3205D mosfet at U9
 |GPIO21| Heater |
 |GPIO22| Top LEDS |
 |GPIO27| st25r3918 i2c data pin|
-|GPIO34| Voltage sensing? |
+|GPIO34| Voltage divider — likely board-revision sensing (confirmed on the Plus/Wall; not verified on the Mini) |
 |GPIO35| Unknown |
 |GPIO36| Thermistor |
 
@@ -97,7 +101,7 @@ following the examples in `secrets.yaml.example`
 | GPIO27| st25r3918 IRQ pin |
 | GPIO32| st25r3918 i2c clock pin |
 | GPIO33| st25r3918 i2c data pin |
-| GPIO34| Unknown | 
+| GPIO34| Board-revision voltage divider — one ADC read at boot identifies the model (see Pura Plus / Wall V4 sections) | 
 | GPIO35| Unknown (shows connectivity on the upper light strip, but 25 is what you configure) | 
 | GPIO36| right thermistor | 
 | GPIO39| left thermistor |
@@ -107,5 +111,71 @@ following the examples in `secrets.yaml.example`
 * The usage check doesn't really work since there are two cart slots
 * The cart read only seems to work from the right slot
 
+> Both of these are addressed by the dual-bay NFC support added below for the
+> Pura Plus / Wall V4: the driver alternates the two antennas (RFO1 / RFO2) so it
+> reads **both** slots, and tracks usage per bay. The Pura 4 uses the same
+> ST25R3918, so wiring up the per-bay sensors should carry over — though I've only
+> verified it on the Plus and Wall.
+
+
+## Pura Plus
+
+The tabletop Pura Plus is USB-C powered, with two cart bays, two mechanical push
+buttons (each with a WS2812 LED behind its translucent cap), and a fan.
+Different board and pinout from the Pura 4. Use `pura-plus.yaml`.
+
+The programming pads are broken out on the back of the board (RX, TX, 3.3V,
+I/O0, GND):
+
+<img src="pura-plus.jpg">
+
+Both bays are read independently via the dual-bay NFC support (RFO1 / RFO2
+antenna switching on the single ST25R3918). `GPIO34` — listed as unknown in the
+Pura 4 notes above — is a board/model-revision voltage divider; one ADC read at
+boot tells the firmware which model it is running on (observed ~0.81 V on the
+Plus, ~0.14 V on the Wall V4).
+
+| Pin | Function |
+| --- | -------- |
+| GPIO0  | Held low for programming |
+| GPIO4  | right button |
+| GPIO5  | st25r3918 i2c clock (SCL) |
+| GPIO12 | left heater |
+| GPIO13 | right heater |
+| GPIO14 | fan |
+| GPIO15 | left button |
+| GPIO18 | st25r3918 i2c data (SDA) |
+| GPIO21 | 2x WS2812, one behind each translucent button cap |
+| GPIO26 | accelerometer INT |
+| GPIO27 | st25r3918 IRQ pin |
+| GPIO34 | board-revision voltage divider (~0.81 V) |
+| GPIO36 | left thermistor |
+| GPIO39 | right thermistor |
+
+## Pura Wall V4
+
+A newer **mains-powered** wall unit that shares the Pura 4 pin family (heaters
+22/23, thermistors 36/39, NFC I2C SDA33/SCL32 IRQ27), with a 6-LED WS2812 ring
+on GPIO25 and two dual-bay pogo antennas. Use `pura-wall.yaml`.
+
+**Safety:** the board is powered from the AC line through a *non-isolated*
+LNK625DG off-line switcher, so its ground is not mains earth. Do **not** connect
+a grounded USB-serial adapter while it is plugged into the wall. Do the first
+flash from an isolated 3.3 V bench supply with the mains cord unplugged, then use
+OTA afterwards. Treat the board as live.
+
+| Pin | Function |
+| --- | -------- |
+| GPIO0  | Held low for programming |
+| GPIO4  | button |
+| GPIO22 | left heater |
+| GPIO23 | right heater |
+| GPIO25 | 6x WS2812 LED ring |
+| GPIO27 | st25r3918 IRQ pin |
+| GPIO32 | st25r3918 i2c clock (SCL) |
+| GPIO33 | st25r3918 i2c data (SDA) |
+| GPIO34 | board-revision voltage divider (~0.14 V) |
+| GPIO36 | left thermistor |
+| GPIO39 | right thermistor |
 
 Support me here https://ko-fi.com/thefatbastid
